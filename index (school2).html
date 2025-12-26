@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <title>منصة القائد - نظام المتابعة والمحاكاة المطور</title>
+    <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        :root { --primary: #1e3a5f; --accent: #e67e22; --success: #25d366; --bg: #f4f7f6; }
+        * { font-family: 'Tajawal', sans-serif !important; box-sizing: border-box; }
+        body { background: var(--bg); margin: 0; padding: 20px; color: #333; }
+        .header { background: var(--primary); color: white; padding: 20px; border-radius: 12px; text-align: center; margin-bottom: 20px; }
+        .upload-area { background: white; padding: 30px; border-radius: 15px; border: 3px dashed var(--primary); text-align: center; margin-bottom: 20px; }
+        .status-bar { display: flex; justify-content: space-between; align-items: center; background: white; padding: 15px; border-radius: 10px; margin-bottom: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); border-right: 5px solid var(--accent); }
+        .controls { background: #fff; padding: 15px; border-radius: 10px; margin-bottom: 20px; display: flex; gap: 10px; align-items: center; border: 1px solid #ddd; }
+        table { width: 100%; border-collapse: collapse; background: white; border-radius: 12px; overflow: hidden; }
+        th { background: #f1f4f6; padding: 15px; border-bottom: 2px solid #eee; }
+        td { padding: 12px; border-bottom: 1px solid #eee; text-align: center; }
+        .btn { border: none; padding: 8px 15px; border-radius: 5px; cursor: pointer; font-weight: bold; }
+        .wa-btn { background: var(--success); color: white; text-decoration: none; font-size: 0.85rem; display: inline-block; }
+        .sim-btn { background: #8e44ad; color: white; }
+        .reset-btn { background: #e74c3c; color: white; }
+        .real-btn { background: #2c3e50; color: white; }
+        .badge { background: var(--accent); color: white; padding: 4px 10px; border-radius: 15px; font-size: 0.9rem; }
+        .hidden { display: none; }
+        .mode-indicator { font-weight: bold; padding: 5px 10px; border-radius: 5px; }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <h2 style="margin:0;">📍 منصة القائد الذكية</h2>
+</div>
+
+<div id="uploadContainer" class="upload-area">
+    <h3>يرجى رفع ملف الجدول (time1.xml)</h3>
+    <input type="file" id="xmlInput" accept=".xml" onchange="processAndSave(this)">
+    <p>سيتم حفظ البيانات في متصفحك بشكل دائم</p>
+</div>
+
+<div id="dashboard" class="hidden">
+    <div class="controls">
+        <strong>⚙️ أدوات الفحص:</strong>
+        <button class="btn sim-btn" onclick="activateSimulation()">🎲 تشغيل المحاكاة</button>
+        <button class="btn real-btn" onclick="activateRealTime()">⏱️ الوقت الفعلي</button>
+        <button class="btn reset-btn" onclick="clearMemory()" style="margin-right: auto;">🗑️ تغيير الملف</button>
+    </div>
+
+    <div class="status-bar">
+        <div id="info">--</div>
+        <div id="txtPeriod" style="font-weight: bold; color: var(--accent);">--</div>
+        <div id="modeTag" class="mode-indicator" style="background: #ecf0f1;">الوقت الفعلي</div>
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th>الصف</th>
+                <th>المعلم</th>
+                <th>المادة</th>
+                <th>تواصل واتساب</th>
+            </tr>
+        </thead>
+        <tbody id="tableBody"></tbody>
+    </table>
+</div>
+
+<script>
+const teacherDirectory = {
+    "أحمد البلوشي": "96892959789", "أحمد عبدالوهاب": "96890128035", "أحمد عيسى جمعه البوصافي": "96892876386",
+    "احمد سالم محمد الغمارى": "96895500478", "احمد عبدالتواب": "96876609518", "احمد محمد جمعه البوصافى": "96892923979",
+    "ايهاب علي محمد السيد": "96891606092", "بلعرب": "96897366148", "حارث محمد احمد البطاشى": "96893355596",
+    "حمد المشرفي": "96890918714", "خالد العلوي": "96896326333", "خالد راشد سعيد الغمارى": "96899857755",
+    "راشد ناصر راشد الوهيبى": "96899211393", "سالم خميس جمعه الزهيمى": "96899322745", "سيف احمد سيف البطاشى": "96898920818",
+    "س رياضيات": "96876609518", "وس رياضيات": "96876609518"
+};
+
+let db = { teachers: {}, classes: {}, subjects: {}, lessons: [], periods: [] };
+let simulationActive = false;
+let simDay, simTime;
+
+window.onload = function() {
+    const saved = localStorage.getItem('schoolTableData');
+    if (saved) { db = JSON.parse(saved); showDashboard(); }
+};
+
+function processAndSave(input) {
+    const reader = new FileReader();
+    reader.readAsText(input.files[0], "windows-1256");
+    reader.onload = function(e) {
+        const xml = new DOMParser().parseFromString(e.target.result, "text/xml");
+        Array.from(xml.getElementsByTagName('teacher')).forEach(t => db.teachers[t.getAttribute('id')] = t.getAttribute('name'));
+        Array.from(xml.getElementsByTagName('class')).forEach(c => db.classes[c.getAttribute('id')] = c.getAttribute('short'));
+        Array.from(xml.getElementsByTagName('subject')).forEach(s => db.subjects[s.getAttribute('id')] = s.getAttribute('name'));
+        Array.from(xml.getElementsByTagName('period')).forEach(p => db.periods.push({id: p.getAttribute('period'), s: p.getAttribute('starttime'), e: p.getAttribute('endtime')}));
+        db.lessons = Array.from(xml.getElementsByTagName('TimeTableSchedule')).map(l => ({
+            d: l.getAttribute('DayID'), p: l.getAttribute('Period'), c: l.getAttribute('ClassID'), t: l.getAttribute('TeacherID'), s: l.getAttribute('SubjectGradeID')
+        }));
+        localStorage.setItem('schoolTableData', JSON.stringify(db));
+        showDashboard();
+    };
+}
+
+function showDashboard() {
+    document.getElementById('uploadContainer').classList.add('hidden');
+    document.getElementById('dashboard').
