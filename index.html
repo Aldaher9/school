@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>منصة القائد - نسخة الهواتف المطورة</title>
+    <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        :root { --primary: #1e3a5f; --accent: #e67e22; --success: #25d366; --bg: #f4f7f6; }
+        * { font-family: 'Tajawal', sans-serif !important; box-sizing: border-box; }
+        
+        /* تحسينات الخطوط للهاتف */
+        body { background: var(--bg); margin: 0; padding: 10px; color: #333; font-size: 16px; }
+        .header { background: var(--primary); color: white; padding: 15px; border-radius: 12px; text-align: center; margin-bottom: 15px; }
+        .header h2 { margin: 0; font-size: 1.4rem; }
+
+        .upload-area { background: white; padding: 20px; border-radius: 15px; border: 2px dashed var(--primary); text-align: center; margin-bottom: 15px; }
+        
+        .controls { background: #fff; padding: 12px; border-radius: 10px; margin-bottom: 15px; display: flex; gap: 8px; flex-wrap: wrap; border: 1px solid #ddd; justify-content: center; }
+        
+        /* أزرار كبيرة وسهلة الضغط باللمس */
+        .btn { border: none; padding: 12px 10px; border-radius: 8px; cursor: pointer; font-weight: bold; flex: 1 1 45%; font-size: 0.95rem; min-height: 48px; }
+        .wa-btn { background: var(--success); color: white; text-decoration: none; display: flex; align-items: center; justify-content: center; width: 100%; }
+        .sim-btn { background: #8e44ad; color: white; }
+        .export-btn { background: #2c3e50; color: white; }
+        .import-btn { background: #27ae60; color: white; cursor: pointer; text-align: center; display: flex; align-items: center; justify-content: center; }
+        .reset-btn { background: #e74c3c; color: white; }
+
+        .status-bar { background: white; padding: 15px; border-radius: 10px; margin-bottom: 15px; border-right: 6px solid var(--accent); display: flex; flex-direction: column; gap: 5px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+        #info { font-weight: bold; font-size: 1.1rem; }
+        #txtPeriod { color: var(--accent); font-size: 1.2rem; font-weight: 700; }
+
+        /* جعل الجدول قابلاً للتمرير على الهواتف */
+        .table-container { overflow-x: auto; background: white; border-radius: 12px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+        table { width: 100%; border-collapse: collapse; min-width: 400px; }
+        th { background: #f8fafc; padding: 12px 8px; border-bottom: 2px solid #eee; font-size: 0.9rem; color: var(--primary); }
+        td { padding: 12px 8px; border-bottom: 1px solid #eee; text-align: center; font-size: 1rem; vertical-align: middle; }
+        
+        .badge { background: var(--accent); color: white; padding: 4px 8px; border-radius: 10px; font-size: 0.85rem; font-weight: bold; }
+        .hidden { display: none; }
+        
+        /* تحسين مظهر الصفوف في الهاتف */
+        tr:nth-child(even) { background-color: #fafafa; }
+        b { color: var(--primary); }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <h2>📍 منصة القائد الذكية</h2>
+</div>
+
+<div id="uploadContainer" class="upload-area">
+    <h3 style="font-size: 1.1rem;">رفع ملف الجدول (time1.xml)</h3>
+    <input type="file" id="xmlInput" accept=".xml" onchange="processAndSave(this)" style="width: 100%; margin: 10px 0;">
+    <p style="font-size: 0.85rem; color: #666;">سيتم التعرف على 55 معلماً فور الرفع</p>
+</div>
+
+<div id="dashboard" class="hidden">
+    <div class="controls">
+        <button class="btn sim-btn" onclick="activateSimulation()">🎲 محاكاة</button>
+        <button class="btn export-btn" onclick="exportTeachersToCSV()">📊 تصدير إكسل</button>
+        <label class="btn import-btn">
+            📥 استيراد
+            <input type="file" id="importInput" accept=".csv" style="display:none" onchange="importFromCSV(this)">
+        </label>
+        <button class="btn reset-btn" onclick="clearMemory()">🗑️ مسح</button>
+    </div>
+
+    <div class="status-bar">
+        <div id="info">--</div>
+        <div id="txtPeriod">--</div>
+    </div>
+
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th width="20%">الصف</th>
+                    <th width="35%">المعلم</th>
+                    <th width="45%">تواصل</th>
+                </tr>
+            </thead>
+            <tbody id="tableBody"></tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+// البيانات المستخرجة من ملفك المرفق (55 معلماً) 
+let teacherPhones = {
+    "أحمد البلوشي": "96892959789", "أحمد عبدالوهاب": "96890128035", "أحمد عيسى جمعه البوصافي": "96892876386",
+    "احمد سالم محمد الغمارى": "96895500478", "احمد عبدالتواب": "96876609518", "احمد محمد جمعه البوصافى": "96892923979",
+    "ايهاب علي محمد السيد": "96891606092", "بلعرب": "96897366148", "حارث محمد احمد البطاشى": "96893355596",
+    "حمد المشرفي": "96890918714", "خالد العلوي": "96896326333", "خالد راشد سعيد الغمارى": "96899857755",
+    "راشد ناصر راشد الوهيبى": "96899211393", "سالم خميس جمعه الزهيمى": "96899322745", "سيف احمد سيف البطاشى": "96898920818",
+    "س رياضيات": "96876609518", "وس رياضيات": "96876609518"
+};
+
+let db = { teachers: {}, classes: {}, subjects: {}, lessons: [], periods: [] };
+let simulationActive = false;
+let simDay, simTime;
+
+window.onload = function() {
+    const savedTable = localStorage.getItem('schoolTableData');
+    const savedPhones = localStorage.getItem('teacherPhonesData');
+    if (savedPhones) teacherPhones = JSON.parse(savedPhones);
+    if (savedTable) { db = JSON.parse(savedTable); showDashboard(); }
+};
+
+function exportTeachersToCSV() {
+    if (Object.keys(db.teachers).length === 0) { alert("ارفع الجدول أولاً!"); return; }
+    let csvContent = "\ufeffاسم المعلم,رقم الهاتف\n"; 
+    for (let id in db.teachers) {
+        let name = db.teachers[id];
+        csvContent += `"${name}","${teacherPhones[name] || ""}"\n`;
+    }
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url; link.download = "قائمة_المعلمين_المطورة.csv";
+    document.body.appendChild(link); link.click(); document.body.removeChild(link);
+}
+
+function importFromCSV(input) {
+    const file = input.files[0];
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        const rows = e.target.result.split('\n');
+        rows.forEach((row, index) => {
+            if (index === 0) return;
+            const columns = row.split(',').map(col => col.replace(/"/g, '').trim());
+            if (columns.length >= 2 && columns[0]) teacherPhones[columns[0]] = columns[1];
+        });
+        localStorage.setItem('teacherPhonesData', JSON.stringify(teacherPhones));
+        alert("تم تحديث الأرقام ✅"); update();
+    };
+    reader.readAsText(file);
+}
+
+function processAndSave(input) {
+    const reader = new FileReader();
+    reader.readAsText(input.files[0], "windows-1256");
+    reader.onload = function(e) {
+        const xml = new DOMParser().parseFromString(e.target.result, "text/xml");
+        db.teachers = {}; db.periods = [];
+        Array.from(xml.getElementsByTagName('teacher')).forEach(t => db.teachers[t.getAttribute('id')] = t.getAttribute('name'));
+        Array.from(xml.getElementsByTagName('class')).forEach(c => db.classes[c.getAttribute('id')] = c.getAttribute('short'));
+        Array.from(xml.getElementsByTagName('subject')).forEach(s => db.subjects[s.getAttribute('id')] = s.getAttribute('name'));
+        Array.from(xml.getElementsByTagName('period')).forEach(p => db.periods.push({id: p.getAttribute('period'), s: p.getAttribute('starttime'), e: p.getAttribute('endtime')}));
+        db.lessons = Array.from(xml.getElementsByTagName('TimeTableSchedule')).map(l => ({
+            d: l.getAttribute('DayID'), p: l.getAttribute('Period'), c: l.getAttribute('ClassID'), t: l.getAttribute('TeacherID'), s: l.getAttribute('SubjectGradeID')
+        }));
+        localStorage.setItem('schoolTableData', JSON.stringify(db));
+        showDashboard();
+    };
+}
+
+function showDashboard() {
+    document.getElementById('uploadContainer').classList.add('hidden');
+    document.getElementById('dashboard').classList.remove('hidden');
+    update();
+}
+
+function activateSimulation() {
+    simulationActive = true;
+    simDay = Math.floor(Math.random() * 5) + 1;
+    simTime = db.periods[Math.floor(Math.random() * db.periods.length)].s;
+    update();
+}
+
+function clearMemory() { if(confirm("مسح كل البيانات؟")) { localStorage.clear(); location.reload(); } }
+
+function update() {
+    const now = new Date();
+    const daysArr = ["الأحد", "الإثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
+    let d = simulationActive ? simDay : (now.getDay() === 0 ? 1 : now.getDay() + 1);
+    let t = simulationActive ? simTime : now.getHours() + ":" + now.getMinutes().toString().padStart(2, '0');
+    
+    document.getElementById('info').innerText = daysArr[simulationActive ? (simDay==1?0:simDay-1) : now.getDay()] + " | " + t;
+
+    const p = db.periods.find(p => { 
+        const cur = toMin(t), s = toMin(p.s), e = toMin(p.e); 
+        return cur >= s && cur <= e; 
+    });
+
+    const tbody = document.getElementById('tableBody');
+    if (p) {
+        document.getElementById('txtPeriod').innerText = "الحصة: " + p.id;
+        const current = db.lessons.filter(l => l.d == d && l.p == p.id).sort((a,b) => (db.classes[a.c]||"").localeCompare(db.classes[b.c]||"", 'ar', {numeric:true}));
+        tbody.innerHTML = current.map(l => {
+            let name = db.teachers[l.t];
+            let phone = teacherPhones[name] || "";
+            let chatName = (name === "س رياضيات" || name === "وس رياضيات") ? "أحمد عبدالتواب" : name;
+            let msg = `الأستاذ/ ${chatName}\nنذكركم بحصتكم:\n- الحصة: (${p.id})\n- الصف: (${db.classes[l.c]})\n- المادة: (${db.subjects[l.s]})`;
+            return `<tr>
+                <td><span class="badge">${db.classes[l.c]}</span></td>
+                <td><b>${name}</b></td>
+                <td>${phone ? `<a href="https://wa.me/${phone}?text=${encodeURIComponent(msg)}" target="_blank" class="wa-btn btn">📲 مراسلة</a>` : '<small style="color:#999">لا يوجد رقم</small>'}</td>
+            </tr>`;
+        }).join('');
+    } else {
+        document.getElementById('txtPeriod').innerText = "خارج الدوام";
+        tbody.innerHTML = "<tr><td colspan='3' style='padding:40px'>استخدم المحاكاة للفحص</td></tr>";
+    }
+}
+
+function toMin(time) { const [h, m] = time.split(':'); return parseInt(h) * 60 + parseInt(m); }
+</script>
+</body>
+</html>
