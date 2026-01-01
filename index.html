@@ -2,143 +2,145 @@
 <html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <title>منصة مدير المدرسة - تقارير ذكية بدون تكرار</title>
+    <title>نظام الزيارات الإشرافية - التقرير الذكي</title>
     <style>
         :root { --primary: #1a5f7a; --accent: #27ae60; --bg: #f4f7f6; }
-        body { font-family: 'Segoe UI', sans-serif; background: var(--bg); margin: 0; padding: 20px; text-align: right; }
-        .container { max-width: 900px; margin: auto; background: white; padding: 30px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
-        .header { text-align: center; color: var(--primary); border-bottom: 2px solid #eee; margin-bottom: 25px; padding-bottom: 10px;}
-        input[type="text"], input[type="file"] { width: 100%; padding: 10px; margin: 10px 0; border: 1px solid #ddd; border-radius: 5px; box-sizing: border-box; }
-        table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+        body { font-family: 'Segoe UI', Tahoma, sans-serif; background: var(--bg); margin: 0; padding: 20px; text-align: right; }
+        .container { max-width: 950px; margin: auto; background: white; padding: 30px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        .header { text-align: center; border-bottom: 2px solid var(--primary); margin-bottom: 20px; padding-bottom: 10px; }
+        input, select { padding: 10px; border: 1px solid #ccc; border-radius: 5px; font-family: inherit; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
         th { background: var(--primary); color: white; padding: 12px; }
         td { padding: 10px; border-bottom: 1px solid #eee; }
-        .btn-main { width: 100%; padding: 15px; background: var(--accent); color: white; border: none; border-radius: 8px; font-size: 1.1rem; cursor: pointer; font-weight: bold; }
-        #reportOutput { display: none; margin-top: 30px; padding: 30px; border: 2px solid var(--primary); border-radius: 10px; background: #fff; }
-        .score-sel { width: 100%; padding: 8px; border-radius: 5px; border: 1px solid #3498db; }
+        .btn-gen { width: 100%; padding: 15px; background: var(--accent); color: white; border: none; border-radius: 8px; font-size: 1.2rem; cursor: pointer; margin-top: 20px; font-weight: bold; }
+        #reportOutput { display: none; margin-top: 30px; padding: 30px; border: 2px solid #333; background: #fff; line-height: 1.8; position: relative; }
+        @media print { .no-print { display: none; } #reportOutput { border: none; } }
     </style>
 </head>
 <body>
 
-<div class="container">
-    <div class="header"><h2>نظام التقييم القائم على المعايير</h2></div>
-
-    <div style="background:#eef2f3; padding:15px; border-radius:8px; margin-bottom:20px;">
-        <label><b>خطوة 1: رفع ملف العبارات الجديد (JSON)</b></label>
-        <input type="file" id="jsonInput" accept=".json" onchange="processDatabase(event)">
-        <p id="status" style="color:#1a5f7a; font-weight:bold;"></p>
+<div class="container no-print">
+    <div class="header"><h2>منظومة تقييم الأداء الفني</h2></div>
+    
+    <div style="background:#e8f4f8; padding:15px; border-radius:8px; margin-bottom:20px;">
+        <label><b>أولاً: رفع ملف العبارات (ملف العبارات جديد.json):</b></label><br>
+        <input type="file" id="jsonFile" accept=".json" onchange="initApp(event)" style="margin-top:10px;">
     </div>
 
-    <div class="form-group">
-        <label>اسم المعلم:</label>
-        <input type="text" id="tName" placeholder="أدخل اسم المعلم">
+    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:20px;">
+        <div class="form-group"><label>اسم المعلم:</label><br><input type="text" id="tName" style="width:100%"></div>
+        <div class="form-group"><label>المادة / الصف:</label><br><input type="text" id="tInfo" style="width:100%"></div>
     </div>
 
-    <table id="evalTable" style="display:none">
+    <table id="mainTable" style="display:none">
         <thead>
             <tr>
-                <th style="text-align: right;">المعيار الأساسي للتقييم</th>
-                <th style="width: 180px;">التقدير (1-5)</th>
+                <th style="text-align: right;">المعيار الأساسي</th>
+                <th style="width: 200px;">التقدير</th>
             </tr>
         </thead>
         <tbody id="tableBody"></tbody>
     </table>
 
-    <button id="genBtn" class="btn-main" style="display:none" onclick="generateFinalReport()">توليد التقرير المختصر</button>
+    <button id="btnAction" class="btn-gen" style="display:none" onclick="generateFinalReport()">توليد المحضر المختصر</button>
+</div>
 
-    <div id="reportOutput">
-        <div id="reportContent"></div>
-        <button class="btn-main" style="background:#333; margin-top:15px;" onclick="window.print()">حفظ التقرير PDF</button>
-    </div>
+<div id="reportOutput">
+    <div id="printArea"></div>
+    <button class="btn-gen no-print" style="background:#444" onclick="window.print()">طباعة التقرير PDF</button>
 </div>
 
 <script>
-    let rawData = [];
-    let uniqueCriteria = [];
+    let phrasesDB = [];
+    let criteriaList = [];
 
-    function processDatabase(event) {
+    function initApp(event) {
         const file = event.target.files[0];
         const reader = new FileReader();
         reader.onload = function(e) {
             try {
-                rawData = JSON.parse(e.target.result);
-                
-                // 1. تنظيف البيانات وتحديد المعيار لكل سطر (حتى الأسطر الفارغة ينسبها للمعيار السابق)
-                let currentCriteria = "";
-                rawData.forEach(item => {
+                const raw = JSON.parse(e.target.result);
+                // معالجة البيانات لربط الأسطر الفارغة بالمعيار الصحيح
+                let lastCrit = "";
+                phrasesDB = raw.map(item => {
                     if (item["المعيار / البند"] && item["المعيار / البند"].trim() !== "") {
-                        currentCriteria = item["المعيار / البند"].trim();
+                        lastCrit = item["المعيار / البند"].trim();
                     }
-                    item.mappedCriteria = currentCriteria;
+                    return { ...item, parentCriteria: lastCrit };
                 });
 
-                // 2. استخراج قائمة المعايير الفريدة فقط للعرض في الجدول
-                uniqueCriteria = [...new Set(rawData.map(item => item.mappedCriteria))].filter(c => c !== "");
-
-                renderTable();
-                document.getElementById('status').innerText = "✅ تم تحميل " + uniqueCriteria.length + " معياراً بدون تكرار.";
-            } catch (err) { alert("خطأ في معالجة الملف."); }
+                criteriaList = [...new Set(phrasesDB.map(i => i.parentCriteria))].filter(c => c);
+                renderUI();
+            } catch (err) { alert("خطأ في قراءة قاعدة البيانات."); }
         };
         reader.readAsText(file);
     }
 
-    function renderTable() {
+    function renderUI() {
         const tbody = document.getElementById('tableBody');
-        tbody.innerHTML = uniqueCriteria.map(name => `
+        tbody.innerHTML = criteriaList.map(c => `
             <tr>
-                <td style="text-align: right; font-weight: bold;">${name}</td>
+                <td style="font-weight:bold">${c}</td>
                 <td>
-                    <select class="score-sel" data-criteria="${name}">
+                    <select class="score-input" data-criteria="${c}">
                         <option value="1">1 (متميز)</option>
                         <option value="2">2 (جيد جداً)</option>
                         <option value="3" selected>3 (ملائم)</option>
-                        <option value="4">4 (يحتاج تطوير)</option>
+                        <option value="4">4 (يحتاج تحسين)</option>
                         <option value="5">5 (يحتاج تدخل)</option>
                     </select>
                 </td>
             </tr>
         `).join('');
-        document.getElementById('evalTable').style.display = 'table';
-        document.getElementById('genBtn').style.display = 'block';
+        document.getElementById('mainTable').style.display = 'table';
+        document.getElementById('btnAction').style.display = 'block';
     }
 
     function generateFinalReport() {
-        const teacher = document.getElementById('tName').value || "المعلم";
-        const selects = document.querySelectorAll('.score-sel');
+        const name = document.getElementById('tName').value || "المعلم";
+        const info = document.getElementById('tInfo').value || "";
+        const inputs = document.querySelectorAll('.score-input');
         
-        let strengths = [], needsDev = [], recommendations = [];
+        let allMatches = [];
 
-        selects.forEach(sel => {
-            const score = parseInt(sel.value);
-            const crit = sel.dataset.criteria;
-            
-            // البحث عن العبارة الدقيقة المرتبطة بهذا المعيار وهذا التقدير
-            const match = rawData.find(p => p.mappedCriteria === crit && p["الحكم"].includes(`(${score})`));
-
-            if (match) {
-                const desc = match["الوصف السلوكي لجوانب الإجادة / أولويات التطوير"];
-                const rec = match["التوصيات"];
-                
-                if (score <= 2) strengths.push(desc);
-                else if (score >= 4) needsDev.push(desc);
-                
-                if (rec) recommendations.push(rec);
-            }
+        inputs.forEach(input => {
+            const val = parseInt(input.value);
+            const crit = input.dataset.criteria;
+            const match = phrasesDB.find(p => p.parentCriteria === crit && p["الحكم"].includes(`(${val})`));
+            if (match) allMatches.push({ score: val, data: match });
         });
 
-        // صياغة التقرير حسب الطلب (3 نقاط، نثرية، شكر)
-        let html = `<div style="text-align:center; border-bottom:2px solid #333; margin-bottom:20px;">
-                        <h2>تقرير الزيارة الإشرافية الفنية</h2>
-                    </div>`;
+        // المنطق المطلوب: 
+        // 1. أفضل 3 تقديرات (1 و 2) لجوانب الإجادة
+        let strengths = allMatches.filter(m => m.score <= 2).sort((a,b) => a.score - b.score).slice(0, 3);
         
-        html += `<p>نتقدم بخالص الشكر للمعلم الفاضل/ <b>${teacher}</b> على جهوده المخلصة وتفاعله الإيجابي خلال الحصة الدراسية، ونضع بين أيديكم ملخصاً لأبرز نقاط الزيارة:</p>`;
-        
-        html += `<div style="margin-right:20px;">`;
-        html += `<p><b>1. جوانب الإجادة:</b> ${strengths.slice(0, 3).join(' - ') || 'تم رصد أداء مستقر ومطابق للمايير.'}</p>`;
-        html += `<p><b>2. جوانب التطوير:</b> ${needsDev.slice(0, 2).join(' - ') || 'لا توجد ملاحظات تطويرية عاجلة.'}</p>`;
-        html += `<p><b>3. التوصيات:</b> نوصي المعلم بالاستمرار في هذا العطاء، و ${[...new Set(recommendations)].slice(0, 2).join('، و ')}.</p>`;
-        html += `</div>`;
+        // 2. جميع التقديرات الأقل من 2 (أي 4 و 5) لجوانب التطوير
+        let weaknesses = allMatches.filter(m => m.score >= 4);
 
-        document.getElementById('reportContent').innerHTML = html;
+        // 3. التوصيات بناءً على نقاط التطوير + الإجادة
+        let recommendations = [...new Set([...strengths, ...weaknesses].map(m => m.data["التوصيات"]))];
+
+        let html = `<div style="text-align:center"><h2>محضر زيارة إشرافية فنية</h2></div>`;
+        html += `<p>نتقدم بالشكر الجزيل للمعلم الفاضل/ <b>${teacherName.value}</b> على أدائه خلال الحصة الدراسية (${info})، ونوجز مخرجات الزيارة في النقاط التالية:</p>`;
+        
+        html += `<div style="margin-right:15px;">`;
+        
+        // نقطة 1: الإجادة
+        html += `<p><b>1. جوانب الإجادة:</b> ${strengths.map(s => s.data["الوصف السلوكي لجوانب الإجادة / أولويات التطوير"]).join(' - ') || 'تم رصد أداء مهني مطابق للمتطلبات.'}</p>`;
+        
+        // نقطة 2: التطوير
+        html += `<p><b>2. جوانب التطوير:</b> ${weaknesses.map(w => w.data["الوصف السلوكي لجوانب الإجادة / أولويات التطوير"]).join(' - ') || 'لا توجد ملاحظات تطويرية عاجلة.'}</p>`;
+        
+        // نقطة 3: التوصيات (بأسلوب نثري)
+        html += `<p><b>3. التوصيات:</b> بناءً على ما تم رصده، نوصي المعلم بالاستمرار في العطاء، والعمل على ${recommendations.slice(0, 3).join('، و ')}.</p>`;
+        
+        html += `</div>`;
+        html += `<br><div style="display:flex; justify-content:space-around; margin-top:40px;">
+                    <div>توقيع المعلم: .................</div>
+                    <div>توقيع مدير المدرسة: .................</div>
+                 </div>`;
+
+        document.getElementById('printArea').innerHTML = html;
         document.getElementById('reportOutput').style.display = 'block';
         window.scrollTo(0, document.body.scrollHeight);
     }
