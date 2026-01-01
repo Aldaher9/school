@@ -2,7 +2,7 @@
 <html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <title>نظام تقارير الأداء الفني - النسخة الاحترافية</title>
+    <title>نظام تقارير مدير المدرسة - النسخة الكاملة</title>
     <style>
         :root { --primary: #1a5f7a; --accent: #27ae60; --bg: #f4f7f6; }
         body { font-family: 'Segoe UI', Tahoma, sans-serif; background: var(--bg); margin: 0; padding: 20px; text-align: right; }
@@ -14,17 +14,18 @@
         td { padding: 12px; border-bottom: 1px solid #eee; }
         .btn-gen { width: 100%; padding: 15px; background: var(--accent); color: white; border: none; border-radius: 8px; font-size: 1.2rem; cursor: pointer; margin-top: 20px; font-weight: bold; }
         #reportOutput { display: none; margin-top: 30px; padding: 30px; border: 2px solid #333; background: #fff; line-height: 1.8; }
-        .report-item { margin: 8px 0; display: block; }
+        .report-item { margin: 8px 0; display: block; border-right: 3px solid var(--accent); padding-right: 10px; }
+        .dev-item { border-right-color: #e74c3c; }
         @media print { .no-print { display: none; } #reportOutput { border: none; } }
     </style>
 </head>
 <body>
 
 <div class="container no-print">
-    <div class="header"><h2>نظام مدير المدرسة لتقييم الزيارات</h2></div>
+    <div class="header"><h2>منظومة تقارير الأداء الفني</h2></div>
     
     <div style="background:#e8f4f8; padding:15px; border-radius:8px; margin-bottom:20px;">
-        <label><b>رفع قاعدة البيانات (JSON):</b></label>
+        <label><b>رفع ملف العبارات (JSON):</b></label>
         <input type="file" id="jsonFile" accept=".json" onchange="initApp(event)" style="margin-top:10px;">
     </div>
 
@@ -36,14 +37,14 @@
     <table id="mainTable" style="display:none">
         <thead>
             <tr>
-                <th style="text-align: right;">المعيار (وصف المؤشر)</th>
+                <th style="text-align: right;">المعيار الأساسي (المؤشر)</th>
                 <th style="width: 180px;">التقدير</th>
             </tr>
         </thead>
         <tbody id="tableBody"></tbody>
     </table>
 
-    <button id="btnAction" class="btn-gen" style="display:none" onclick="generateFinalReport()">توليد التقرير المنظم</button>
+    <button id="btnAction" class="btn-gen" style="display:none" onclick="generateFinalReport()">توليد التقرير النهائي</button>
 </div>
 
 <div id="reportOutput">
@@ -61,33 +62,45 @@
         reader.onload = function(e) {
             try {
                 const raw = JSON.parse(e.target.result);
-                let currentCrit = "";
+                let currentMainCrit = "";
                 
-                // ربط المعايير بالمؤشرات المرافقة لها
+                // تحديد المعيار الرئيسي واستخراج الوصف
                 raw.forEach(item => {
                     if (item["المعيار / البند"] && item["المعيار / البند"].trim() !== "") {
-                        currentCrit = item["المعيار / البند"].trim();
+                        currentMainCrit = item["المعيار / البند"].trim();
                     }
-                    item.mainCriteria = currentCrit;
+                    item.parentCrit = currentMainCrit;
+                    
+                    // استخراج الوصف (المؤشر) من بداية الوصف السلوكي
+                    let desc = "";
+                    if (item["الوصف السلوكي لجوانب الإجادة / أولويات التطوير"]) {
+                        desc = item["الوصف السلوكي لجوانب الإجادة / أولويات التطوير"]
+                               .split(':')[0]
+                               .replace('-', '')
+                               .trim();
+                    }
+                    item.subDesc = desc;
                 });
 
                 phrasesDB = raw;
-                // إنشاء قائمة فريدة للمؤشرات مع أوصافها
+                
+                // تجميع المعايير الفريدة مع أوصافها
                 const uniqueEntries = [];
-                const seen = new Set();
+                const seenKeys = new Set();
                 
                 raw.forEach(item => {
-                    const descMatch = item["الوصف السلوكي لجوانب الإجادة / أولويات التطوير"].split(':')[0].replace('-', '').trim();
-                    const key = item.mainCriteria + " (" + descMatch + ")";
-                    if (!seen.has(key) && item.mainCriteria) {
-                        seen.add(key);
-                        uniqueEntries.push({ title: item.mainCriteria, desc: descMatch });
+                    if (item.parentCrit) {
+                        const key = `${item.parentCrit}|${item.subDesc}`;
+                        if (!seenKeys.has(key)) {
+                            seenKeys.add(key);
+                            uniqueEntries.push({ title: item.parentCrit, desc: item.subDesc });
+                        }
                     }
                 });
 
                 criteriaMap = uniqueEntries;
                 renderUI();
-            } catch (err) { alert("خطأ في قراءة قاعدة البيانات."); }
+            } catch (err) { alert("خطأ في معالجة الملف."); }
         };
         reader.readAsText(file);
     }
@@ -96,7 +109,7 @@
         const tbody = document.getElementById('tableBody');
         tbody.innerHTML = criteriaMap.map(c => `
             <tr>
-                <td style="font-weight:bold">${c.title} <span style="color:#666; font-weight:normal">(${c.desc})</span></td>
+                <td style="font-weight:bold">${c.title} <span style="color:#1a5f7a; font-weight:normal;">(${c.desc})</span></td>
                 <td>
                     <select class="score-input" data-criteria="${c.title}" data-desc="${c.desc}">
                         <option value="1">1 (متميز)</option>
@@ -123,41 +136,36 @@
             const crit = input.dataset.criteria;
             const dsc = input.dataset.desc;
             
-            const match = phrasesDB.find(p => p.mainCriteria === crit && 
-                                         p["الحكم"].includes(`(${val})`) && 
-                                         p["الوصف السلوكي لجوانب الإجادة / أولويات التطوير"].includes(dsc));
+            const match = phrasesDB.find(p => p.parentCrit === crit && 
+                                         p.subDesc === dsc &&
+                                         p["الحكم"].includes(`(${val})`));
             if (match) allMatches.push({ score: val, data: match });
         });
 
-        // فرز النتائج:
-        // 1. أفضل 3 للإجادة (أقل القيم الرقمية)
+        // المنطق: أفضل 3 للإجادة (1 و 2)
         let strengths = [...allMatches].sort((a,b) => a.score - b.score).slice(0, 3);
         
-        // 2. أقل 3 للتطوير (أعلى القيم الرقمية 3 فأعلى)
-        let weaknesses = [...allMatches].filter(m => m.score >= 3)
-                                        .sort((a,b) => b.score - a.score).slice(0, 3);
+        // المنطق: أقل 3 للتطوير (الدرجات الأعلى 5 ثم 4 ثم 3)
+        let weaknesses = [...allMatches].sort((a,b) => b.score - a.score).slice(0, 3);
 
         let recs = [...new Set(weaknesses.map(m => m.data["التوصيات"]))];
 
-        let html = `<div style="text-align:center"><h2>تقرير زيارة إشرافية فنية</h2></div>`;
-        html += `<p>نتقدم بالشكر للمعلم/ <b>${name}</b> على أدائه في حصة (${info})، ونوجز الملاحظات في النقاط التالية:</p>`;
+        let html = `<div style="text-align:center"><h2>محضر زيارة إشرافية فنية</h2></div>`;
+        html += `<p>نتقدم بالشكر للمعلم الفاضل/ <b>${name}</b> على جهوده المخلصة في حصة (${info})، ونضع بين أيديكم ملخصاً لأبرز نتائج الزيارة:</p>`;
         
-        // جوانب الإجادة
-        html += `<div style="margin-bottom:15px;"><b>1. جوانب الإجادة:</b><br>`;
+        html += `<div style="margin-bottom:20px;"><b>1. جوانب الإجادة (أفضل 3 تقديرات):</b>`;
         html += strengths.map(s => `<span class="report-item">- ${s.data["الوصف السلوكي لجوانب الإجادة / أولويات التطوير"]}</span>`).join('');
         html += `</div>`;
 
-        // جوانب التطوير
-        html += `<div style="margin-bottom:15px;"><b>2. جوانب التطوير:</b><br>`;
-        html += weaknesses.map(w => `<span class="report-item">- ${w.data["الوصف السلوكي لجوانب الإجادة / أولويات التطوير"]}</span>`).join('');
+        html += `<div style="margin-bottom:20px;"><b>2. جوانب التطوير (أقل 3 تقديرات):</b>`;
+        html += weaknesses.map(w => `<span class="report-item dev-item">- ${w.data["الوصف السلوكي لجوانب الإجادة / أولويات التطوير"]}</span>`).join('');
         html += `</div>`;
 
-        // التوصيات
-        html += `<div style="margin-bottom:15px;"><b>3. التوصيات:</b><br>نوصي المعلم بالاستمرار في العطاء والعمل على:<br>`;
+        html += `<div style="margin-bottom:20px;"><b>3. التوصيات والمقترحات:</b><br>نوصي المعلم بالاستمرار في العطاء، مع مراعاة الآتي:`;
         html += recs.map(r => `<span class="report-item">- ${r}</span>`).join('');
         html += `</div>`;
 
-        html += `<br><div style="display:flex; justify-content:space-around; margin-top:30px; font-weight:bold;">
+        html += `<br><div style="display:flex; justify-content:space-around; margin-top:40px; font-weight:bold; border-top:1px solid #eee; padding-top:20px;">
                     <div>توقيع المعلم: .................</div>
                     <div>توقيع مدير المدرسة: .................</div>
                  </div>`;
