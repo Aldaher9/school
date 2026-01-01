@@ -2,7 +2,7 @@
 <html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <title>نظام تقارير مدير المدرسة - النسخة الاحترافية</title>
+    <title>نظام تقارير مدير المدرسة - النسخة المعتمدة</title>
     <style>
         :root { --primary: #1a5f7a; --accent: #27ae60; --bg: #f4f7f6; }
         body { font-family: 'Segoe UI', Tahoma, sans-serif; background: var(--bg); margin: 0; padding: 20px; text-align: right; }
@@ -14,7 +14,7 @@
         td { padding: 12px; border-bottom: 1px solid #eee; }
         .btn-gen { width: 100%; padding: 15px; background: var(--accent); color: white; border: none; border-radius: 8px; font-size: 1.2rem; cursor: pointer; margin-top: 20px; font-weight: bold; }
         #reportOutput { display: none; margin-top: 30px; padding: 30px; border: 2px solid #333; background: #fff; line-height: 1.8; }
-        .report-item { margin: 8px 0; display: block; padding-right: 10px; }
+        .report-item { margin: 8px 0; display: block; }
         @media print { .no-print { display: none; } #reportOutput { border: none; } }
     </style>
 </head>
@@ -24,7 +24,7 @@
     <div class="header"><h2>نظام تقييم الزيارات الإشرافية</h2></div>
     
     <div style="background:#e8f4f8; padding:15px; border-radius:8px; margin-bottom:20px;">
-        <label><b>رفع ملف العبارات الجديد (JSON):</b></label>
+        <label><b>رفع ملف العبارات (العبارات جديدة.json):</b></label>
         <input type="file" id="jsonFile" accept=".json" onchange="initApp(event)" style="margin-top:10px;">
     </div>
 
@@ -36,7 +36,7 @@
     <table id="mainTable" style="display:none">
         <thead>
             <tr>
-                <th style="text-align: right;">المعيار (وصف المؤشر)</th>
+                <th style="text-align: right;">المعيار (وصف المعيار)</th>
                 <th style="width: 180px;">التقدير</th>
             </tr>
         </thead>
@@ -53,7 +53,7 @@
 
 <script>
     let phrasesDB = [];
-    let criteriaMap = [];
+    let criteriaList = [];
 
     function initApp(event) {
         const file = event.target.files[0];
@@ -62,47 +62,43 @@
             try {
                 const raw = JSON.parse(e.target.result);
                 let currentMain = "";
+                let currentDesc = "";
                 
-                // معالجة لاستخراج المعيار والوصف (المؤشر)
-                raw.forEach(item => {
+                // منطق معالجة البيانات: ربط كل سطر بالمعيار والوصف الصحيح
+                phrasesDB = raw.map(item => {
                     if (item["المعيار / البند"] && item["المعيار / البند"].trim() !== "") {
                         currentMain = item["المعيار / البند"].trim();
                     }
-                    item.mainKey = currentMain;
-                    
-                    // استخراج الوصف من العمود الرابع (قبل النقطتين الرأسيتين)
-                    let fullDesc = item["الوصف السلوكي لجوانب الإجادة / أولويات التطوير"] || "";
-                    let indicator = fullDesc.split(':')[0].replace('-', '').trim();
-                    item.indicatorName = indicator;
+                    if (item["وصف المعيار"] && item["وصف المعيار"].trim() !== "") {
+                        currentDesc = item["وصف المعيار"].trim();
+                    }
+                    return { ...item, parentCrit: currentMain, parentDesc: currentDesc };
                 });
 
-                phrasesDB = raw;
-                
-                // تجميع المعايير والمؤشرات بشكل فريد للجدول
-                const uniqueEntries = [];
+                // إنشاء قائمة فريدة للمؤشرات لعرضها في الجدول
                 const seen = new Set();
-                raw.forEach(item => {
-                    const key = `${item.mainKey}|${item.indicatorName}`;
-                    if (!seen.has(key) && item.mainKey && item.indicatorName) {
+                criteriaList = [];
+                phrasesDB.forEach(item => {
+                    const key = item.parentCrit + item.parentDesc;
+                    if (!seen.has(key) && item.parentCrit) {
                         seen.add(key);
-                        uniqueEntries.push({ main: item.mainKey, sub: item.indicatorName });
+                        criteriaList.push({ main: item.parentCrit, desc: item.parentDesc });
                     }
                 });
 
-                criteriaMap = uniqueEntries;
                 renderUI();
-            } catch (err) { alert("خطأ في قراءة البيانات."); }
+            } catch (err) { alert("خطأ في معالجة الملف."); }
         };
         reader.readAsText(file);
     }
 
     function renderUI() {
         const tbody = document.getElementById('tableBody');
-        tbody.innerHTML = criteriaMap.map(c => `
+        tbody.innerHTML = criteriaList.map(c => `
             <tr>
-                <td style="font-weight:bold">${c.main} <span style="color:#1a5f7a; font-weight:normal;">(${c.sub})</span></td>
+                <td style="font-weight:bold">${c.main} <span style="color:#1a5f7a; font-weight:normal;">(${c.desc})</span></td>
                 <td>
-                    <select class="score-input" data-main="${c.main}" data-sub="${c.sub}">
+                    <select class="score-input" data-main="${c.main}" data-desc="${c.desc}">
                         <option value="1">1 (متميز)</option>
                         <option value="2">2 (جيد جداً)</option>
                         <option value="3" selected>3 (ملائم)</option>
@@ -121,36 +117,36 @@
         const info = document.getElementById('tInfo').value || "";
         const inputs = document.querySelectorAll('.score-input');
         
-        let allResults = [];
+        let results = [];
         inputs.forEach(input => {
             const val = parseInt(input.value);
             const m = input.dataset.main;
-            const s = input.dataset.sub;
+            const d = input.dataset.desc;
             
-            const match = phrasesDB.find(p => p.mainKey === m && p.indicatorName === s && p["الحكم"].includes(`(${val})`));
-            if (match) allResults.push({ score: val, data: match });
+            const match = phrasesDB.find(p => p.parentCrit === m && p.parentDesc === d && p["الحكم"].includes(`(${val})`));
+            if (match) results.push({ score: val, data: match });
         });
 
-        // 1. أفضل 3 للإجادة (الأقل رقماً 1 ثم 2)
-        let strengths = [...allResults].sort((a,b) => a.score - b.score).slice(0, 3);
+        // أفضل 3 للإجادة (أقل القيم)
+        let strengths = [...results].sort((a,b) => a.score - b.score).slice(0, 3);
         
-        // 2. أقل 3 للتطوير (الأعلى رقماً 5 ثم 4 ثم 3)
-        let weaknesses = [...allResults].sort((a,b) => b.score - a.score).slice(0, 3);
+        // أقل 3 للتطوير (أعلى القيم)
+        let weaknesses = [...results].sort((a,b) => b.score - a.score).slice(0, 3);
 
         let recs = [...new Set(weaknesses.map(m => m.data["التوصيات"]))];
 
         let html = `<div style="text-align:center"><h2>تقرير الزيارة الفنية المختصر</h2></div>`;
-        html += `<p>نتوجه بالشكر والتقدير للمعلم الفاضل/ <b>${name}</b> على جهوده في حصة (${info})، ونوجز المخرجات في الآتي:</p>`;
+        html += `<p>نتقدم بالشكر للمعلم الفاضل/ <b>${name}</b> على جهوده المخلصة في حصة (${info})، ونوجز النتائج في الآتي:</p>`;
         
-        html += `<div style="margin-bottom:15px;"><b>1. جوانب الإجادة (أفضل 3 تقديرات):</b>`;
+        html += `<div style="margin-bottom:20px;"><b>1. جوانب الإجادة (أفضل 3 نقاط):</b>`;
         html += strengths.map(s => `<span class="report-item">- ${s.data["الوصف السلوكي لجوانب الإجادة / أولويات التطوير"]}</span>`).join('');
         html += `</div>`;
 
-        html += `<div style="margin-bottom:15px;"><b>2. جوانب التطوير (أقل 3 تقديرات):</b>`;
+        html += `<div style="margin-bottom:20px;"><b>2. جوانب التطوير (أقل 3 نقاط):</b>`;
         html += weaknesses.map(w => `<span class="report-item">- ${w.data["الوصف السلوكي لجوانب الإجادة / أولويات التطوير"]}</span>`).join('');
         html += `</div>`;
 
-        html += `<div style="margin-bottom:15px;"><b>3. التوصيات:</b><br>نوصي المعلم بالاستمرار في العطاء، والعمل على:`;
+        html += `<div style="margin-bottom:20px;"><b>3. التوصيات والمقترحات:</b><br>بناءً على ما تقدم نوصي بالآتي:`;
         html += recs.map(r => `<span class="report-item">- ${r}</span>`).join('');
         html += `</div>`;
 
